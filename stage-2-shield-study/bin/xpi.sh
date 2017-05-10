@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -eu
+#set -o xtrace
 
 BASE_DIR="$(dirname "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")"
 TMP_DIR=$(mktemp -d)
@@ -14,7 +15,13 @@ function cleanup {
 }
 trap cleanup EXIT
 
-cp -rp step1-hybrid-addon/* $DEST
+# fill templates, could be fancier
+alias moustache='/node_modules/bin/mustache'
+mustache package.json template/install.rdf.mustache > addon/install.rdf
+mustache package.json template/chrome.manifest.mustache > addon/chrome.manifest
+
+
+cp -rp addon/* $DEST
 
 pushd $DEST
 zip -r $DEST/addon.xpi *

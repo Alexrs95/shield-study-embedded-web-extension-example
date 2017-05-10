@@ -9,6 +9,9 @@ log.level = Log.Level.Debug;
 Cu.importGlobalProperties(['URL', 'crypto']);
 var EXPORTED_SYMBOLS = ["shieldUtils"];
 
+Cu.import("resource://gre/modules/AddonManager.jsm");
+Cu.import("resource://gre/modules/Services.jsm");
+
 // telemetry utils
 const CID = Cu.import('resource://gre/modules/ClientID.jsm');
 const { TelemetryController } = Cu.import('resource://gre/modules/TelemetryController.jsm');
@@ -24,6 +27,22 @@ async function getTelemetryId() {
   }
 }
 
+// validation utils
+// import ajv  // https://dxr.mozilla.org/mozilla-central/source/services/sync/tests/unit/head_helpers.js
+// import schemas
+let schemas = {
+  'shield-config': {},
+  'shield-study': {},
+  'sheild-study-addon': {},
+  'sampleWeights': {
+  }
+};
+
+// create a validate function
+function validate (data, schema) {
+  return {valid: true, errors: null}
+}
+
 // sampling utils
 async function sha256(message) {
     const msgBuffer = new TextEncoder('utf-8').encode(message);                     // encode as UTF-8
@@ -37,6 +56,13 @@ function cumsum (arr) {
 }
 
 function chooseFrom(weightedVariations, rng=Math.random()) {
+  /*
+   weightedVaiations, list of:
+   {
+    name: string of any length
+    weight: float > 0
+   }
+  */
   // no checking that weights and choices are unequal in size.
   var weights = weightedVariations.map(x=>x.weight || 1)
   var choices = weightedVariations.map(x=>x.name)
@@ -54,14 +80,9 @@ async function hashed(string, salt, bits=12) {
   return parseInt(hash.substr(0,bits),16)/Math.pow(16,bits)
 }
 
+/*
+/*
 class ShieldStudy {
-  constructor (config) {
-    this.config = config;
-  }
-  telemetry (data) {
-    log.log("telemetry", data)
-  }
-
   startup () {
     log.debug("starting watchers");
     log.debug("watching duration");
@@ -91,6 +112,7 @@ class ShieldStudy {
     return this._variation;
   }
 }
+*/
 
 
 class Shield {
@@ -101,11 +123,14 @@ class Shield {
     this.config = config;
     return this
   }
-  openTab (tab, vars) {
-    log.log("opening this formatted tab")
+  async openTab (url, params={}) {
+    log.log("opening this formatted tab", url, params);
+    Services.wm.getMostRecentWindow(null).gBrowser.addTab(url, params)
+
   }
-  die (reason) {
+  async endStudy (reason) {
     log.log('dying!', reason)
+    // send telemetry, do whatever is needful
   }
   async getTelemetryId () {
     return await getTelemetryId();
@@ -129,12 +154,25 @@ class Shield {
   telemetry (data) {
     log.log("telemetry", data)
   }
-  markTelemetry (which) {
+  setActive (which) {
     log.log('marking', this.config.name, this.variation)
+    TelemetryEnvironment.setExperimentActive(this.config.name, this.variation);
   }
-  unmarkTelemetry (which) {
-    log.log('unmarking', this.config.name, this.variation)
+  unsetActive (which) {
+    log.log('unmarking', this.config.name, this.variation);
+    TelemetryEnvironment.setExperimentInactive(this.config.name);
   }
+  surveyUrl(urlTemplate) {
+    log.log(`survey: ${urlTemplate} filled with args`);
+  }
+
+  uninstall (id) {
+    AddonManager.getAddonByID(id, addon=>addon.uninstall());
+  }
+  // watchExpire()??? timer?  expireAfter?
+  // pingDaily()
+  // simpler install, startup, shutdown methods?
+
 };
 
 var shieldUtils = new Shield ();

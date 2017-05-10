@@ -5,13 +5,26 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "bash ./bin/xpi.sh"
+    "build": "bash ./bin/xpi.sh",
+    "watch": "watch 'npm run build' ."
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "ajv": "^5.0.1",
     "eslint": "^3.19.0",
+    "moustache": "0.0.2",
+    "shield-study-schemas": "^0.8.3",
     "watch": "^1.0.2"
+  },
+  "addon": {
+    "version": "some version",
+    "id": "shield-example-addon@mozilla.com",
+    "name": "Shield Bootstrap Example",
+    "minVersion": "51.0a1",
+    "creator": "Gregg Lind <glind@mozilla.com>",
+    "description": "Shield Intrumented Example As Embedded WebExtension",
+    "chrome": "shield-example-addon"
   }
 }

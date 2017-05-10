@@ -3,12 +3,13 @@
 // __SCRIPT_URI_SPEC__ <- bootstrap.js
 const {utils: Cu} = Components;
 
-Cu.import("resource://gre/modules/Log.jsm");
-const log = Log.repository.getLogger("shield-example");
-log.level = Log.Level.Debug; // TODO @gregglind make this config
-log.addAppender(new Log.ConsoleAppender(new Log.BasicFormatter()));
+const CONFIGPATH = `${__SCRIPT_URI_SPEC__}/../Config.jsm`;
+let config = Cu.import(CONFIGPATH, {}).config; // leak to module
 
-let config, variation, addon;
+Cu.import("resource://gre/modules/Log.jsm");
+const log = Log.repository.getLogger(config.shield.name);
+log.level = Log.Level.Debug; // should be a config
+log.addAppender(new Log.ConsoleAppender(new Log.BasicFormatter()));
 
 // addon state change reasons
 const REASONS = {
@@ -38,6 +39,10 @@ class Jsm {
   }
 }
 
+const that = this;
+let variation;
+
+
 this.install = async function ({webExtension}, reason) {
   log.debug('install', REASONS[reason]);
 };
@@ -47,36 +52,45 @@ this.startup = async function(data, reason) {
   // Array [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
   let {webExtension} = data;
   log.debug('startup', REASONS[reason]);
-  config = Cu.import(`${data.resourceURI.spec}/lib/Config.jsm`, {}).config; // leak to module
   Jsm.import(config.modules);
   shieldUtils.configure(config.shield);
 
   switch (REASONS[reason]) {
     case 'ADDON_INSTALL': {
-      // only here check eligible, if any
-      let eligible = true;
+      // only here check eligible, if any.
+      // GRL this is a problem to tell where / what the eligibility function is.
+      let eligible = await config.shield.isEligible();
+      log.debug("eligible?", eligible);
+      // this feels really stupidly boiler plate to me.
       if (!eligible) {
         shieldUtils.openTab(config.shield.urls.ineligible);
-        shieldUtils.die('ineligible'); // sends telemetry
+        shieldUtils.endStudy('ineligible'); // sends telemetry
+        shieldUtils.uninstall(data.id);
+        // shieldUtils send telemetry install
+        break;
       }
+      //shieldUtils.ping('install');
+
       // no break! go on to startup!
     }
     default: {
+      log.debug("default!");
+      // this also feels stupidly boiler plate
       let clientId = await shieldUtils.getTelemetryId();
       let rng = await shieldUtils.hashed(config.shield.name, clientId);
       variation = shieldUtils.setVariation(
-        config.shield.variation ||
-          shieldUtils.chooseFrom(
-            config.shield.variations,
-            rng=rng
-          )
-        );
+        config.shield.variation /* get it from config */ ||
+        shieldUtils.chooseFrom(
+          config.shield.variations,
+          rng=rng
+        )
+      );
+      // set timeouts and daily watch timers
       break;
     }
   }
 
   webExtension.startup().then(api => {
-    log.debug("we started up!");
     const {browser} = api;
     browser.runtime.onMessage.addListener(({shield,msg,data}, sender, sendResponse) => {
       log.debug("message", msg);
@@ -86,13 +100,13 @@ this.startup = async function(data, reason) {
 };
 
 this.shutdown = async function(data, reason) {
-  log.debug('shutdown', REASONS[reason]);
-  //shieldUtils.shutdown(data, reason);
-  Cu.unload(`${data.resourceURI.spec}/lib/Config.jsm`);
+  log.debug('shutdown', REASONS[reason] || reason);
+  Cu.unload(CONFIGPATH);
   Jsm.unload(config.modules);
+  //shieldUtils.shutdown(data, reason);
 };
 
 this.uninstall = async function (reason) {
-  log.debug('uninstall', REASONS[reason]);
+  log.debug('uninstall', REASONS[reason] || reason);
   //shieldUtils.uninstall(reason);
 };

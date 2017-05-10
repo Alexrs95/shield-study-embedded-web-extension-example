@@ -39,7 +39,6 @@ class Jsm {
   }
 }
 
-const that = this;
 let variation;
 
 
@@ -54,48 +53,39 @@ this.startup = async function(data, reason) {
   log.debug('startup', REASONS[reason]);
   Jsm.import(config.modules);
   shieldUtils.configure(config.shield);
+  shieldUtils.setAddonId(data.id); // GRL UGH, wtf!
 
   switch (REASONS[reason]) {
     case 'ADDON_INSTALL': {
-      // only here check eligible, if any.
-      // GRL this is a problem to tell where / what the eligibility function is.
       let eligible = await config.shield.isEligible();
-      log.debug("eligible?", eligible);
-      // this feels really stupidly boiler plate to me.
       if (!eligible) {
-        shieldUtils.openTab(config.shield.urls.ineligible);
-        shieldUtils.endStudy('ineligible'); // sends telemetry
-        shieldUtils.uninstall(data.id);
-        // shieldUtils send telemetry install
-        break;
+        await shieldUtils.standardIneligible();
+        return
       }
-      //shieldUtils.ping('install');
-
-      // no break! go on to startup!
+      shieldUtils.ping('install');
+      // no break! fall through to startup!
     }
-    default: {
-      log.debug("default!");
-      // this also feels stupidly boiler plate
-      let clientId = await shieldUtils.getTelemetryId();
-      let rng = await shieldUtils.hashed(config.shield.name, clientId);
-      variation = shieldUtils.setVariation(
-        config.shield.variation /* get it from config */ ||
-        shieldUtils.chooseFrom(
-          config.shield.variations,
-          rng=rng
-        )
-      );
-      // set timeouts and daily watch timers
+    case 'APP_STARTUP': {
+      await shieldUtils.standardStartup()
       break;
     }
+    default:
+      log.debug("got this!  wut?", REASONS[reason]);
+      break;
   }
 
   webExtension.startup().then(api => {
     const {browser} = api;
+
+    // listen for any messages intended for shield
     browser.runtime.onMessage.addListener(({shield,msg,data}, sender, sendResponse) => {
-      log.debug("message", msg);
-      if (shield) sendResponse(shieldUtils[msg](data))
+      if (!shield) return;
+      let allowed = ['end', 'telemetry', 'info'];
+      if (! allowed.includes(msg)) return;
+      sendResponse(shieldUtils[msg](data))
     });
+
+    // register other handlers from your addon
   });
 };
 
@@ -103,7 +93,6 @@ this.shutdown = async function(data, reason) {
   log.debug('shutdown', REASONS[reason] || reason);
   Cu.unload(CONFIGPATH);
   Jsm.unload(config.modules);
-  //shieldUtils.shutdown(data, reason);
 };
 
 this.uninstall = async function (reason) {

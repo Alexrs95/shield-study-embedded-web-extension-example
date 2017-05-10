@@ -28,7 +28,7 @@ var config = {
       "expired": "http://www.example.com/?reason=expired"
     },
     "isEligible": async function () {
-      return false;
+      return true;
     }
   },
   // modules to load/unload

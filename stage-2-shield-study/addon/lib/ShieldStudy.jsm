@@ -1,6 +1,5 @@
 "use strict";
 
-
 const {utils: Cu} = Components;
 Cu.import("resource://gre/modules/Log.jsm");
 let log = Log.repository.getLogger("shield-study");
@@ -80,41 +79,6 @@ async function hashed(string, salt, bits=12) {
   return parseInt(hash.substr(0,bits),16)/Math.pow(16,bits)
 }
 
-/*
-/*
-class ShieldStudy {
-  startup () {
-    log.debug("starting watchers");
-    log.debug("watching duration");
-    log.debug("watching telemetry at...");
-    return this
-  }
-  shutdown () {
-    return this
-  }
-  async chooseVariation () {
-    return "kitten";
-  }
-  setVariation (variation) {
-    this._variation = variation;
-    return this;
-  }
-  save () {
-    log.log("saved to disk!");
-    return this
-  }
-  load () {
-    log.log("loaded from disk!");
-    return this
-  }
-
-  get variation () {
-    return this._variation;
-  }
-}
-*/
-
-
 class Shield {
   constructor () {
     this.config = {}
@@ -125,12 +89,14 @@ class Shield {
   }
   async openTab (url, params={}) {
     log.log("opening this formatted tab", url, params);
-    Services.wm.getMostRecentWindow(null).gBrowser.addTab(url, params)
+    Services.wm.getMostRecentWindow("navigator:browser").gBrowser.addTab(url, params)
 
   }
-  async endStudy (reason) {
+  async end ({reason}) {
     log.log('dying!', reason)
     // send telemetry, do whatever is needful
+    this.ping({action:"ended", reason:reason});
+    this.uninstall()
   }
   async getTelemetryId () {
     return await getTelemetryId();
@@ -162,17 +128,44 @@ class Shield {
     log.log('unmarking', this.config.name, this.variation);
     TelemetryEnvironment.setExperimentInactive(this.config.name);
   }
+  setAddonId(id) {
+    this._addonId = id;
+  }
   surveyUrl(urlTemplate) {
     log.log(`survey: ${urlTemplate} filled with args`);
   }
 
   uninstall (id) {
+    if (!id) id = this._addonId;
     AddonManager.getAddonByID(id, addon=>addon.uninstall());
+  }
+  ping (...args) {
+    // grossly titled, but sends study pings
+    log.log('ping', ...args);
   }
   // watchExpire()??? timer?  expireAfter?
   // pingDaily()
   // simpler install, startup, shutdown methods?
-
+  async standardIneligible() {
+    this.config.urls.ineligible && this.openTab(this.config.urls.ineligible);
+    this.end('ineligible'); // sends telemetry
+    this.ping("inelgible");
+    this.uninstall();
+    // shieldUtils send telemetry install
+  }
+  async standardStartup () {
+    let config = this.config;
+    let clientId = await this.getTelemetryId();
+    let rng = await shieldUtils.hashed(config.name, clientId);
+    this.setVariation(
+      config.variation /* get it from config */ ||
+      this.chooseFrom(
+        config.variations,
+        rng=rng
+      )
+    );
+    // set a running timer?
+  }
 };
 
 var shieldUtils = new Shield ();

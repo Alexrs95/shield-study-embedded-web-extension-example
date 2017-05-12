@@ -6,10 +6,69 @@ const {utils: Cu} = Components;
 const CONFIGPATH = `${__SCRIPT_URI_SPEC__}/../Config.jsm`;
 let config = Cu.import(CONFIGPATH, {}).config; // leak to module
 
+// logging
 Cu.import("resource://gre/modules/Log.jsm");
 const log = Log.repository.getLogger(config.shield.name);
-log.level = Log.Level.Debug; // should be a config
 log.addAppender(new Log.ConsoleAppender(new Log.BasicFormatter()));
+log.level = config.log.level || Log.Level.Debug; // should be a config / pref
+
+let variation;
+
+this.startup = async function(data, reason) {
+  // Array [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
+  log.debug('startup', REASONS[reason] || reason);
+  let {webExtension} = data;
+  Jsm.import(config.modules);
+
+  // config has branches, sampling, urls, addonData with id
+  studyUtils.configure(config.shield, data);
+
+  switch (REASONS[reason]) {
+    case 'ADDON_INSTALL': {
+      let eligible = await config.isEligible(); // addon-specific
+      if (!eligible) {
+        await studyUtils.endStudy({reason:'ineligible'});
+        return
+      }
+      await studyUtils.magicStartup(reason);
+      break;
+    }
+    case 'APP_STARTUP': {
+      await studyUtils.magicStartup(reason);
+      break;
+    }
+    default:
+      log.debug("got this!  wut?", REASONS[reason]);
+      break;
+  }
+
+  webExtension.startup().then(api => {
+    const {browser} = api;
+    // messages for shield:  {shield:true,msg=[endStudy|telemetry]}
+    browser.runtime.onMessage.addListener((...args) => studyUtils.handleWebExtensionMessage(...args));
+    // register other handlers from your addon, if any
+
+  });
+};
+
+this.shutdown = async function(data, reason) {
+  log.debug('shutdown', REASONS[reason] || reason);
+  studyUtils.magicShutdown(reason);
+  // unloads must come after module work
+  Cu.unload(CONFIGPATH);
+  Jsm.unload(config.modules);
+};
+
+this.uninstall = async function (data, reason) {
+  log.debug('uninstall', REASONS[reason] || reason);
+};
+
+this.install = async function (data, reason) {
+  log.debug('install', REASONS[reason] || reason);   // handle ADDON_UPGRADE if needful
+};
+
+
+/* CONSTANTS and other stuff */
 
 // addon state change reasons
 const REASONS = {
@@ -24,78 +83,19 @@ const REASONS = {
 };
 for (let r in REASONS) { REASONS[REASONS[r]] = r;}
 
+// jsm loader / unloader
 class Jsm {
   static import (modulesArray) {
-    for (const module of modulesArray) {
+    for (let module of modulesArray) {
       log.debug(`loading ${module}`);
       Cu.import(module);
     }
   }
   static unload (modulesArray) {
-    for (const module of modulesArray) {
+    for (let module of modulesArray) {
       log.debug(`Unloading ${module}`);
       Cu.unload(module);
     }
   }
 }
 
-let variation;
-
-
-this.install = async function ({webExtension}, reason) {
-  log.debug('install', REASONS[reason]);
-};
-
-this.startup = async function(data, reason) {
-  // Start the embedded webextension.
-  // Array [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
-  let {webExtension} = data;
-  log.debug('startup', REASONS[reason]);
-  Jsm.import(config.modules);
-  shieldUtils.configure(config.shield);
-  shieldUtils.setAddonId(data.id); // GRL UGH, wtf!
-
-  switch (REASONS[reason]) {
-    case 'ADDON_INSTALL': {
-      let eligible = await config.shield.isEligible();
-      if (!eligible) {
-        await shieldUtils.standardIneligible();
-        return
-      }
-      shieldUtils.ping('install');
-      // no break! fall through to startup!
-    }
-    case 'APP_STARTUP': {
-      await shieldUtils.standardStartup()
-      break;
-    }
-    default:
-      log.debug("got this!  wut?", REASONS[reason]);
-      break;
-  }
-
-  webExtension.startup().then(api => {
-    const {browser} = api;
-
-    // listen for any messages intended for shield
-    browser.runtime.onMessage.addListener(({shield,msg,data}, sender, sendResponse) => {
-      if (!shield) return;
-      let allowed = ['end', 'telemetry', 'info'];
-      if (! allowed.includes(msg)) return;
-      sendResponse(shieldUtils[msg](data))
-    });
-
-    // register other handlers from your addon
-  });
-};
-
-this.shutdown = async function(data, reason) {
-  log.debug('shutdown', REASONS[reason] || reason);
-  Cu.unload(CONFIGPATH);
-  Jsm.unload(config.modules);
-};
-
-this.uninstall = async function (reason) {
-  log.debug('uninstall', REASONS[reason] || reason);
-  //shieldUtils.uninstall(reason);
-};

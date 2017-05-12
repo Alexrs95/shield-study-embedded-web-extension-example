@@ -1,15 +1,32 @@
 "use strict";
 
 const {utils: Cu} = Components;
+
 Cu.import("resource://gre/modules/Log.jsm");
-let log = Log.repository.getLogger("shield-study");
+const log = Log.repository.getLogger("shield-study-utils");
+log.addAppender(new Log.ConsoleAppender(new Log.BasicFormatter()));
 log.level = Log.Level.Debug;
 
+
+
 Cu.importGlobalProperties(['URL', 'crypto']);
-var EXPORTED_SYMBOLS = ["shieldUtils"];
+var EXPORTED_SYMBOLS = ["studyUtils"];
 
 Cu.import("resource://gre/modules/AddonManager.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
+
+// addon state change reasons
+const REASONS = {
+  APP_STARTUP: 1,      // The application is starting up.
+  APP_SHUTDOWN: 2,     // The application is shutting down.
+  ADDON_ENABLE: 3,     // The add-on is being enabled.
+  ADDON_DISABLE: 4,    // The add-on is being disabled. (Also sent during uninstallation)
+  ADDON_INSTALL: 5,    // The add-on is being installed.
+  ADDON_UNINSTALL: 6,  // The add-on is being uninstalled.
+  ADDON_UPGRADE: 7,    // The add-on is being upgraded.
+  ADDON_DOWNGRADE: 8,  // The add-on is being downgraded.
+};
+for (let r in REASONS) { REASONS[REASONS[r]] = r;}
 
 // telemetry utils
 const CID = Cu.import('resource://gre/modules/ClientID.jsm');
@@ -79,12 +96,13 @@ async function hashed(string, salt, bits=12) {
   return parseInt(hash.substr(0,bits),16)/Math.pow(16,bits)
 }
 
-class Shield {
+class StudyUtils {
   constructor () {
     this.config = {}
   }
-  configure (config) {
+  configure (config, addonData) {
     this.config = config;
+    this.addonData = addonData;
     return this
   }
   async openTab (url, params={}) {
@@ -136,7 +154,7 @@ class Shield {
   }
 
   uninstall (id) {
-    if (!id) id = this._addonId;
+    if (!id) id = this.addonInfo.id;
     AddonManager.getAddonByID(id, addon=>addon.uninstall());
   }
   ping (...args) {
@@ -145,27 +163,53 @@ class Shield {
   }
   // watchExpire()??? timer?  expireAfter?
   // pingDaily()
-  // simpler install, startup, shutdown methods?
-  async standardIneligible() {
-    this.config.urls.ineligible && this.openTab(this.config.urls.ineligible);
-    this.end('ineligible'); // sends telemetry
-    this.ping("inelgible");
-    this.uninstall();
-    // shieldUtils send telemetry install
-  }
-  async standardStartup () {
+
+  async magicStartup (reason, options = {}) {
+    log.debug(`magicStartup ${reason}`)
     let config = this.config;
+
+    // this is the standard arm choosing method
     let clientId = await this.getTelemetryId();
-    let rng = await shieldUtils.hashed(config.name, clientId);
-    this.setVariation(
-      config.variation /* get it from config */ ||
-      this.chooseFrom(
+    let rng = await hashed(config.name, clientId);
+
+    let toSet, source;
+
+    if (options.variation) {
+      toSet = options.variation;
+      source = "function-argument";
+    }
+    else if (config.variation) {
+      toSet = config.variation;
+      source = "startup-config";
+    }
+    else {
+      source = 'weightedVariation';
+      toSet = this.chooseFrom(
         config.variations,
         rng=rng
-      )
-    );
+      );
+    }
+    log.debug(`variation: ${toSet} source:${source}`);
+    this.setVariation(toSet);
     // set a running timer?
+  }
+
+  async magicShutdown(reason) {
+    log.debug(`magicShutdown ${reason}`);
+  }
+  async endStudy({reason}) {
+    log.debug(`wants to end study ${reason}`);
+    this.config.urls[reason] && this.openTab(this.config.urls[reason]);
+    this.ping(reason); // shieldUtils send telemetry install
+    this.uninstall();  // should be controllable by arg?
+  }
+  async handleWebExtensionMessage({shield,msg,data}, sender, sendResponse) {
+    // shield: boolean, if present, request is for shield
+    if (!shield) return;
+    let allowedMethods= ['endStudy', 'telemetry', 'info'];
+    if (! allowedMethods.includes(msg)) return;
+    sendResponse(this[msg](data));
   }
 };
 
-var shieldUtils = new Shield ();
+var studyUtils = new StudyUtils ();

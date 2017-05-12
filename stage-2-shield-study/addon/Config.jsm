@@ -13,7 +13,6 @@ var slug = 'shield-example-addon'; // matches chrome.manifest;
 
 var config = {
   "shield": {
-    "days": 1,
     "name": "an experiment",
     "variation": "kittens", // optional, use to override/decide
     "variations": [
@@ -22,17 +21,32 @@ var config = {
       {"name": "puppers",
        "weight": 1}
     ],
-    // urls to open after different events.  Usually surveys or orientation pages
+    /** **urls**
+      * - keys indicate the 'endStudy' even that opens these.
+      * - urls should be static (data) or external, because they have to
+      *   survive uninstall
+      * - If there is no key for an endStudy reason, no url will open.
+      * - usually surveys, orientations, explanations
+      */
     "urls": {
       "ineligible": "http://www.example.com/?reason=ineligible",
-      "expired": "http://www.example.com/?reason=expired"
+      "expired": "http://www.example.com/?reason=expired",
+      // made using datauri-cli
+      "too-popular": "data:text/html;base64,PGh0bWw+CiAgPGJvZHk+CiAgICA8cD5Zb3UgYXJlIHVzaW5nIHRoaXMgZmVhdHVyZSA8c3Ryb25nPlNPIE1VQ0g8L3N0cm9uZz4gdGhhdCB3ZSBrbm93IHlvdSBsb3ZlIGl0IQogICAgPC9wPgogICAgPHA+VGhlIEV4cGVyaW1lbnQgaXMgb3ZlciBhbmQgd2UgYXJlIFVOSU5TVEFMTElORwogICAgPC9wPgogIDwvYm9keT4KPC9odG1sPgo="
     },
-    "isEligible": async function () {
-      return true;
-    }
+    "endings": [
+      // maybe have a mapping of reasons to good, bad, neutral, etc?
+    ],
+    "days": 1, // optional
   },
-  // modules to load/unload
+  "isEligible": async function () {
+    return true;
+  },
+  // addon-specific modules to load/unload during `startup`, `shutdown`
   "modules": [
     `resource://${slug}/lib/ShieldStudy.jsm`
-  ]
+  ],
+  "log": {
+    "level": 0
+  }
 };

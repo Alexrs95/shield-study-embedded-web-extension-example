@@ -2,7 +2,7 @@
 
 // template code for talking to shield across `browser.runtime`
 async function askShield (msg, data) {
-  let allowed = ['end', 'telemetry', 'info'];
+  let allowed = ['endStudy', 'telemetry', 'info'];
   if (!allowed.includes(msg)) throw new Error(`shieldUtils doesn't know ${msg}, only knows ${allowed}`);
   return await browser.runtime.sendMessage({shield: true, msg: msg, data: data});
 }
@@ -25,10 +25,11 @@ class Feature {
 
     // addon-initiated ending
     if (this.times > 5) {
-      tellShield("end", {reason: "too-popular"});
+      tellShield("endStudy", {reason: "too-popular"});
     }
   }
 }
 
+// initialize the feature, using our specific variation
 askShield("info").then(({variation})=> new Feature({variation:variation}))
 

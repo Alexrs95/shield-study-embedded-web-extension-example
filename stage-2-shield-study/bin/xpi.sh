@@ -16,6 +16,7 @@ function cleanup {
 trap cleanup EXIT
 
 # fill templates, could be fancier
+echo $PWD
 alias moustache='/node_modules/bin/mustache'
 mustache package.json template/install.rdf.mustache > addon/install.rdf
 mustache package.json template/chrome.manifest.mustache > addon/chrome.manifest
@@ -25,6 +26,8 @@ cp -rp addon/* $DEST
 
 pushd $DEST
 zip -r $DEST/addon.xpi *
-mv addon.xpi $BASE_DIR
+mkdir -p $BASE_DIR/dist
+mv addon.xpi $BASE_DIR/dist
+echo "xpi at ${BASE_DIR}/dist/addon.xpi"
 popd
 

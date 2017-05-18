@@ -27,6 +27,7 @@ this.startup = async function(data, reason) {
     case 'ADDON_INSTALL': {
       let eligible = await config.isEligible(); // addon-specific
       if (!eligible) {
+        // opens config.urls.ineligible if any, then uninstalls
         await studyUtils.endStudy({reason:'ineligible'});
         return
       }
@@ -42,9 +43,11 @@ this.startup = async function(data, reason) {
       break;
   }
 
+  // if you have code to handle expiration / long-timers, it goes here.
+
   webExtension.startup().then(api => {
     const {browser} = api;
-    // messages for shield:  {shield:true,msg=[endStudy|telemetry]}
+    // messages intended for shield:  {shield:true,msg=[endStudy|telemetry],data=data}
     browser.runtime.onMessage.addListener((...args) => studyUtils.handleWebExtensionMessage(...args));
     // register other handlers from your addon, if any
 
@@ -55,7 +58,7 @@ this.shutdown = async function(data, reason) {
   log.debug('shutdown', REASONS[reason] || reason);
   studyUtils.magicShutdown(reason);
   // unloads must come after module work
-  Cu.unload(CONFIGPATH);
+  Jsm.unload([CONFIGPATH]);
   Jsm.unload(config.modules);
 };
 

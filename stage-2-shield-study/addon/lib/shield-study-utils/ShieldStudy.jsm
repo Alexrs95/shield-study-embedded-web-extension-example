@@ -7,13 +7,12 @@ const log = Log.repository.getLogger("shield-study-utils");
 log.addAppender(new Log.ConsoleAppender(new Log.BasicFormatter()));
 log.level = Log.Level.Debug;
 
-
-
 Cu.importGlobalProperties(['URL', 'crypto']);
-var EXPORTED_SYMBOLS = ["studyUtils"];
+const EXPORTED_SYMBOLS = ["studyUtils"];
 
 Cu.import("resource://gre/modules/AddonManager.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
+Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 
 // addon state change reasons
 const REASONS = {
@@ -43,13 +42,34 @@ async function getTelemetryId() {
   }
 }
 
-// validation utils
-// import ajv  // https://dxr.mozilla.org/mozilla-central/source/services/sync/tests/unit/head_helpers.js
-// import schemas
-let schemas = {
-  'shield-config': {},
-  'shield-study': {},
-  'sheild-study-addon': {},
+const DIRECTORY = new URL(this.__URI__ + "/../").href;
+XPCOMUtils.defineLazyGetter(this, "nodeRequire", () => {
+  const {Loader, Require} = Cu.import("resource://gre/modules/commonjs/toolkit/loader.js", {});
+  const loader = new Loader({
+    paths: {
+      "": DIRECTORY
+    }
+  });
+  return new Require(loader, {});
+});
+
+XPCOMUtils.defineLazyGetter(this, "ajv", () => {
+  const Ajv = nodeRequire("ajv.min.js");
+  return new Ajv();
+});
+
+// I don't LOVE this interface
+var jsonschema = {
+  validate: function (data, schema) {
+    var valid = ajv.validate(schema, data);
+    return {valid: valid, errors:  ajv.errors || []};
+  }
+};
+
+const schemas = {
+  'shield-study': nodeRequire('schemas-client/shield-study.schema.json'),
+  'shield-study-addon': nodeRequire('schemas-client/shield-study-addon.schema.json'),
+  'shield-study-error': nodeRequire('schemas-client/shield-study-error.schema.json'),
   'sampleWeights': {
   }
 };
@@ -57,6 +77,24 @@ let schemas = {
 // create a validate function
 function validate (data, schema) {
   return {valid: true, errors: null}
+}
+
+// survey utils
+function survey (url, queryArgs={}) {
+  if (! url) return;
+
+  let U = new URL(url);
+  let q = U.search || '?';
+  q = new URLSearchParams(q);
+
+  // get user info.
+  Object.keys(queryArgs).forEach((k)=>{
+    q.set(k, queryArgs[k]);
+  });
+
+  let searchstring = q.toString();
+  U.search = searchstring;
+  return U.toString();
 }
 
 // sampling utils
@@ -98,7 +136,17 @@ async function hashed(string, salt, bits=12) {
 
 class StudyUtils {
   constructor () {
-    this.config = {}
+    this.config = {};
+    this.addonData = {};
+
+    // es6-ish way of binding up `this`.
+    this.handleWebExtensionMessage = async function ({shield,msg,data}, sender, sendResponse) {
+      // shield: boolean, if present, request is for shield
+      if (!shield) return;
+      let allowedMethods= ['endStudy', 'telemetry', 'info'];
+      if (! allowedMethods.includes(msg)) return;
+      sendResponse(this[msg](data));
+    }
   }
   configure (config, addonData) {
     this.config = config;
@@ -106,12 +154,12 @@ class StudyUtils {
     return this
   }
   async openTab (url, params={}) {
-    log.log("opening this formatted tab", url, params);
+    log.debug("opening this formatted tab", url, params);
     Services.wm.getMostRecentWindow("navigator:browser").gBrowser.addTab(url, params)
 
   }
   async end ({reason}) {
-    log.log('dying!', reason)
+    log.debug('dying!', reason)
     // send telemetry, do whatever is needful
     this.ping({action:"ended", reason:reason});
     this.uninstall()
@@ -136,30 +184,31 @@ class StudyUtils {
     return this.config
   }
   telemetry (data) {
-    log.log("telemetry", data)
+    log.debug("telemetry", data)
   }
   setActive (which) {
-    log.log('marking', this.config.name, this.variation)
+    log.debug('marking', this.config.name, this.variation)
     TelemetryEnvironment.setExperimentActive(this.config.name, this.variation);
   }
   unsetActive (which) {
-    log.log('unmarking', this.config.name, this.variation);
+    log.debug('unmarking', this.config.name, this.variation);
     TelemetryEnvironment.setExperimentInactive(this.config.name);
   }
   setAddonId(id) {
     this._addonId = id;
   }
   surveyUrl(urlTemplate) {
-    log.log(`survey: ${urlTemplate} filled with args`);
+    log.debug(`survey: ${urlTemplate} filled with args`);
   }
 
   uninstall (id) {
-    if (!id) id = this.addonInfo.id;
+    if (!id) id = this.addonData.id;
+    log.debug(`about to uninstall ${id}`)
     AddonManager.getAddonByID(id, addon=>addon.uninstall());
   }
   ping (...args) {
     // grossly titled, but sends study pings
-    log.log('ping', ...args);
+    log.debug('ping', ...args);
   }
   // watchExpire()??? timer?  expireAfter?
   // pingDaily()
@@ -193,7 +242,6 @@ class StudyUtils {
     this.setVariation(toSet);
     // set a running timer?
   }
-
   async magicShutdown(reason) {
     log.debug(`magicShutdown ${reason}`);
   }
@@ -203,13 +251,6 @@ class StudyUtils {
     this.ping(reason); // shieldUtils send telemetry install
     this.uninstall();  // should be controllable by arg?
   }
-  async handleWebExtensionMessage({shield,msg,data}, sender, sendResponse) {
-    // shield: boolean, if present, request is for shield
-    if (!shield) return;
-    let allowedMethods= ['endStudy', 'telemetry', 'info'];
-    if (! allowedMethods.includes(msg)) return;
-    sendResponse(this[msg](data));
-  }
 };
 
-var studyUtils = new StudyUtils ();
+var studyUtils = new StudyUtils();

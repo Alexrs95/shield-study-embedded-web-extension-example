@@ -44,7 +44,7 @@ var config = {
   },
   // addon-specific modules to load/unload during `startup`, `shutdown`
   "modules": [
-    `resource://${slug}/lib/ShieldStudy.jsm`
+    `resource://${slug}/lib/shield-study-utils/ShieldStudy.jsm`
   ],
   "log": {
     "level": 0

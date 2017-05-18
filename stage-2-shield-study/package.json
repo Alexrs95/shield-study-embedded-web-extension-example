@@ -5,18 +5,16 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "bash ./bin/xpi.sh",
-    "watch": "watch 'npm run build' ."
+    "build": "bash ./bin/xpi.sh"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "ajv": "^5.0.1",
+    "ajv": "^5.1.1",
+    "datauri": "^1.0.5",
     "eslint": "^3.19.0",
-    "moustache": "0.0.2",
-    "shield-study-schemas": "^0.8.3",
-    "watch": "^1.0.2"
+    "moustache": "0.0.2"
   },
   "addon": {
     "version": "some version",

@@ -44,7 +44,7 @@ this.startup = async function(data, reason) {
 
   webExtension.startup().then(api => {
     const {browser} = api;
-    // messages for shield:  {shield:true,msg=[endStudy|telemetry]}
+    // messages for shield:  {shield:true,msg=[endStudy|telemetry],data=data}
     browser.runtime.onMessage.addListener((...args) => studyUtils.handleWebExtensionMessage(...args));
     // register other handlers from your addon, if any
 

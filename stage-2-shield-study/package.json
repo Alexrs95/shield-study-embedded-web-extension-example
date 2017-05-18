@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "prebuild1":  "node bin/inlineRequires.js src/ShieldStudy.jsm > addon/lib/ShieldStudy.jsm",
+    "prebuild": "webpack",
     "build": "bash ./bin/xpi.sh",
     "watch": "watch 'npm run build' ."
   },
@@ -12,11 +14,12 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "ajv": "^5.0.1",
+    "ajv": "^5.1.1",
     "eslint": "^3.19.0",
     "moustache": "0.0.2",
     "shield-study-schemas": "^0.8.3",
-    "watch": "^1.0.2"
+    "watch": "^1.0.2",
+    "wrapper-webpack-plugin": "^0.1.11"
   },
   "addon": {
     "version": "some version",

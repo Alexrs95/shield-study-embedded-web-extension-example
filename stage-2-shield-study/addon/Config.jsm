@@ -38,6 +38,7 @@ var config = {
       // maybe have a mapping of reasons to good, bad, neutral, etc?
     ],
     "days": 1, // optional
+    "testing": true  // marks pings as testing
   },
   "isEligible": async function () {
     return true;

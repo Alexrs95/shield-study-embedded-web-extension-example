@@ -25,6 +25,7 @@ this.startup = async function(data, reason) {
 
   switch (REASONS[reason]) {
     case 'ADDON_INSTALL': {
+      studyUtils.firstSeen(); // TODO, store a time
       let eligible = await config.isEligible(); // addon-specific
       if (!eligible) {
         // opens config.urls.ineligible if any, then uninstalls
@@ -34,23 +35,17 @@ this.startup = async function(data, reason) {
       await studyUtils.magicStartup(reason);
       break;
     }
-    case 'APP_STARTUP': {
-      await studyUtils.magicStartup(reason);
-      break;
-    }
-    default:
-      log.debug("got this!  wut?", REASONS[reason]);
-      break;
   }
 
-  // if you have code to handle expiration / long-timers, it goes here.
+  await studyUtils.magicChooseVariation(); // also sets it.
+  await studyUtils.magicStartup(reason);
 
+  // if you have code to handle expiration / long-timers, it goes here.
   webExtension.startup().then(api => {
     const {browser} = api;
     // messages intended for shield:  {shield:true,msg=[endStudy|telemetry],data=data}
     browser.runtime.onMessage.addListener((...args) => studyUtils.handleWebExtensionMessage(...args));
     // register other handlers from your addon, if any
-
   });
 };
 

@@ -7,6 +7,9 @@ const log = Log.repository.getLogger("shield-study-utils");
 log.addAppender(new Log.ConsoleAppender(new Log.BasicFormatter()));
 log.level = Log.Level.Debug;
 
+const UTILS_VERSION = 4; //TODO glind require('../package.json').version;
+const PACKET_VERSION = 3;
+
 Cu.importGlobalProperties(['URL', 'crypto']);
 const EXPORTED_SYMBOLS = ["studyUtils"];
 
@@ -45,11 +48,7 @@ async function getTelemetryId() {
 const DIRECTORY = new URL(this.__URI__ + "/../").href;
 XPCOMUtils.defineLazyGetter(this, "nodeRequire", () => {
   const {Loader, Require} = Cu.import("resource://gre/modules/commonjs/toolkit/loader.js", {});
-  const loader = new Loader({
-    paths: {
-      "": DIRECTORY
-    }
-  });
+  const loader = new Loader({});
   return new Require(loader, {});
 });
 
@@ -67,9 +66,9 @@ var jsonschema = {
 };
 
 const schemas = {
-  'shield-study': nodeRequire('schemas-client/shield-study.schema.json'),
-  'shield-study-addon': nodeRequire('schemas-client/shield-study-addon.schema.json'),
-  'shield-study-error': nodeRequire('schemas-client/shield-study-error.schema.json'),
+  'shield-study': nodeRequire(DIRECTORY + 'schemas-client/shield-study.schema.json'),
+  'shield-study-addon': nodeRequire(DIRECTORY + 'schemas-client/shield-study-addon.schema.json'),
+  'shield-study-error': nodeRequire(DIRECTORY + 'schemas-client/shield-study-error.schema.json'),
   'sampleWeights': {
   }
 };
@@ -156,13 +155,6 @@ class StudyUtils {
   async openTab (url, params={}) {
     log.debug("opening this formatted tab", url, params);
     Services.wm.getMostRecentWindow("navigator:browser").gBrowser.addTab(url, params)
-
-  }
-  async end ({reason}) {
-    log.debug('dying!', reason)
-    // send telemetry, do whatever is needful
-    this.ping({action:"ended", reason:reason});
-    this.uninstall()
   }
   async getTelemetryId () {
     return await getTelemetryId();
@@ -183,8 +175,9 @@ class StudyUtils {
   info () {
     return this.config
   }
-  telemetry (data) {
-    log.debug("telemetry", data)
+  firstSeen () {
+    log.debug("firstSeen: ${date.now()}");
+    this._telemetry({study_state: 'enter'}, 'shield-study');
   }
   setActive (which) {
     log.debug('marking', this.config.name, this.variation)
@@ -194,27 +187,18 @@ class StudyUtils {
     log.debug('unmarking', this.config.name, this.variation);
     TelemetryEnvironment.setExperimentInactive(this.config.name);
   }
-  setAddonId(id) {
-    this._addonId = id;
-  }
   surveyUrl(urlTemplate) {
     log.debug(`survey: ${urlTemplate} filled with args`);
   }
-
   uninstall (id) {
     if (!id) id = this.addonData.id;
     log.debug(`about to uninstall ${id}`)
     AddonManager.getAddonByID(id, addon=>addon.uninstall());
   }
-  ping (...args) {
-    // grossly titled, but sends study pings
-    log.debug('ping', ...args);
-  }
   // watchExpire()??? timer?  expireAfter?
   // pingDaily()
-
-  async magicStartup (reason, options = {}) {
-    log.debug(`magicStartup ${reason}`)
+  async magicChooseVariation () {
+    log.debug(`magicChooseVariation`)
     let config = this.config;
 
     // this is the standard arm choosing method
@@ -242,14 +226,123 @@ class StudyUtils {
     this.setVariation(toSet);
     // set a running timer?
   }
+  async magicStartup(reason) {
+    log.debug(`magicStartup ${reason}`);
+    if (reason === REASONS.ADDON_INSTALL) {
+      this._telemetry({study_state: 'installed'}, 'shield-study');
+    }
+  }
   async magicShutdown(reason) {
     log.debug(`magicShutdown ${reason}`);
   }
-  async endStudy({reason}) {
+  async endStudy({reason, fullname}) {
     log.debug(`wants to end study ${reason}`);
+    // TODO glind, think about reason vs fullname
+    // TODO glind, think about race conditions for endings, ensure only one exit
     this.config.urls[reason] && this.openTab(this.config.urls[reason]);
-    this.ping(reason); // shieldUtils send telemetry install
-    this.uninstall();  // should be controllable by arg?
+    switch (reason) {
+      case "ineligible":
+      case "expired":
+      case "user-disable":
+      case "ended-positive":
+      case "ended-neutral":
+      case "ended-negative":
+        this._telemetry({study_state: reason, fullname: fullname});
+        break;
+      default:
+        this._telemetry({study_state: "ended-neutral", study_state_fullname: reason});
+        // unless we know better TODO grl
+    }
+    // these are all exits
+    this._telemetry({study_state: 'exit'}, 'shield-study');
+    this.uninstall();  // TODO glind. should be controllable by arg?
+  }
+
+  get surveyQueryArgs () {
+    let queryArgs = {
+      shield: PACKET_VERSION,
+      study: this.config.name,
+      variation: this.variation,
+      updateChannel: Services.appinfo.defaultUpdateChannel,
+      fxVersion: Services.appinfo.version,
+      addon: self.version, // addon version
+      who: userId() // telemetry clientId
+    };
+    if (prefSvc.get('shield.testing')) queryArgs.testing = 1;
+    return queryArgs;
+  }
+
+  showSurvey(reason) {
+    // should there be an appendArgs boolean?
+    let partial = this.config.urls[reason];
+
+    let queryArgs = this.surveyQueryArgs;
+
+    queryArgs.reason = reason;
+    if (partial) {
+      let url = survey(partial, queryArgs);
+      //emit(SurveyWatcher, 'survey', [reason, url]);
+      this.openTab(url);
+      return url;
+    } else {
+      //emit(SurveyWatcher, 'survey', [reason, null]);
+      return;
+    }
+  }
+  _telemetry(data, bucket='shield-study-addon') {
+    let payload = {
+      version:        PACKET_VERSION,
+      study_name:     this.config.name,
+      branch:         this.variation,
+      //addon_version:  self.version,
+      shield_version: UTILS_VERSION,
+      type:           bucket,
+      data:           data
+    };
+    //if (prefSvc.get('shield.testing')) payload.testing = true;
+    payload.testing = this.config.testing;
+
+    let validation;
+
+    /* istanbul ignore next */
+    try {
+      validation = jsonschema.validate(payload, schemas[bucket]);
+    } catch (err) {
+      // if validation broke, GIVE UP.
+      log.error(err);
+      return;
+    }
+
+    if (validation.errors.length) {
+      let errorReport = {
+        'error_id': 'jsonschema-validation',
+        'error_source': 'addon',
+        'severity': 'fatal',
+        'message': JSON.stringify(validation.errors)
+      };
+      if (bucket === 'shield-study-error') {
+        // log: if it's a warn or error, it breaks jpm test
+        Console.log('cannot validate shield-study-error', data, bucket);
+        return; // just die, maybe should have a super escape hatch?
+      }
+      return this.telemetryError(errorReport);
+    }
+    //emit(TelemetryWatcher, 'telemetry', [bucket, payload]);
+    let telOptions = {addClientId: true, addEnvironment: true};
+    return TelemetryController.submitExternalPing(bucket, payload, telOptions);
+  }
+
+  // telemetry from addon
+  telemetry (data) {
+    log.debug(`telemetry ${data}`);
+    let toSubmit = {
+      attributes: data
+    };
+    this._telemetry(toSubmit, 'shield-study-addon');
+  }
+
+  telemetryError (errorReport) {
+    return this._telemetry(errorReport, 'shield-study-error');
   }
 };
 

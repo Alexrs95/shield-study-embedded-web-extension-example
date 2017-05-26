@@ -15,15 +15,14 @@ log.level = config.log.level || Log.Level.Debug; // should be a config / pref
 this.startup = async function(addonData, reason) {
   // Array [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
   log.debug('startup', REASONS[reason] || reason);
-  let {webExtension} = addonData;
   Jsm.import(config.modules);
 
-  // config has branches, sampling, urls, addonaddonData with id
+  // 1. Configure variations, sampling, urls, addonData with id
   studyUtils.configure(config.shield, addonData);
 
   switch (REASONS[reason]) {
     case 'ADDON_INSTALL': {
-      studyUtils.firstSeen(); // TODO, store a time
+      studyUtils.firstSeen(Date.now()); // TODO, store a time
       let eligible = await config.isEligible(); // addon-specific
       if (!eligible) {
         // opens config.urls.ineligible if any, then uninstalls
@@ -33,15 +32,19 @@ this.startup = async function(addonData, reason) {
     }
   }
 
-  await studyUtils.magicChooseVariation(); // also sets it.
+  await studyUtils.setVariation(studyUtils.magicChooseVariation());
   await studyUtils.magicStartup(reason);
 
   // if you have code to handle expiration / long-timers, it goes here.
+
+  let {webExtension} = addonData;
   webExtension.startup().then(api => {
     const {browser} = api;
     // messages intended for shield:  {shield:true,msg=[endStudy|telemetry],data=data}
     browser.runtime.onMessage.addListener((...args) => studyUtils.handleWebExtensionMessage(...args));
-    // register other handlers from your addon, if any
+
+    //  other message handlers from your addon, if any
+
   });
 };
 

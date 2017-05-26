@@ -223,14 +223,14 @@ class StudyUtils {
       );
     }
     log.debug(`variation: ${toSet} source:${source}`);
-    this.setVariation(toSet);
-    // set a running timer?
+    return toSet;
   }
   async magicStartup(reason) {
     log.debug(`magicStartup ${reason}`);
     if (reason === REASONS.ADDON_INSTALL) {
       this._telemetry({study_state: 'installed'}, 'shield-study');
     }
+    // set timers
   }
   async magicShutdown(reason) {
     log.debug(`magicShutdown ${reason}`);

@@ -12,16 +12,14 @@ const log = Log.repository.getLogger(config.shield.name);
 log.addAppender(new Log.ConsoleAppender(new Log.BasicFormatter()));
 log.level = config.log.level || Log.Level.Debug; // should be a config / pref
 
-let variation;
-
-this.startup = async function(data, reason) {
+this.startup = async function(addonData, reason) {
   // Array [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
   log.debug('startup', REASONS[reason] || reason);
-  let {webExtension} = data;
+  let {webExtension} = addonData;
   Jsm.import(config.modules);
 
-  // config has branches, sampling, urls, addonData with id
-  studyUtils.configure(config.shield, data);
+  // config has branches, sampling, urls, addonaddonData with id
+  studyUtils.configure(config.shield, addonData);
 
   switch (REASONS[reason]) {
     case 'ADDON_INSTALL': {
@@ -32,8 +30,6 @@ this.startup = async function(data, reason) {
         await studyUtils.endStudy({reason:'ineligible'});
         return
       }
-      await studyUtils.magicStartup(reason);
-      break;
     }
   }
 
@@ -49,7 +45,7 @@ this.startup = async function(data, reason) {
   });
 };
 
-this.shutdown = async function(data, reason) {
+this.shutdown = async function(addonData, reason) {
   log.debug('shutdown', REASONS[reason] || reason);
   studyUtils.magicShutdown(reason);
   // unloads must come after module work
@@ -57,11 +53,11 @@ this.shutdown = async function(data, reason) {
   Jsm.unload(config.modules);
 };
 
-this.uninstall = async function (data, reason) {
+this.uninstall = async function (addonData, reason) {
   log.debug('uninstall', REASONS[reason] || reason);
 };
 
-this.install = async function (data, reason) {
+this.install = async function (addonData, reason) {
   log.debug('install', REASONS[reason] || reason);   // handle ADDON_UPGRADE if needful
 };
 

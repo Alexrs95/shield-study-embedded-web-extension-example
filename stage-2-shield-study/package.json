@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "bash ./bin/xpi.sh"
+    "build": "bash ./bin/xpi.sh",
+    "eslint": "eslint addon --ext jsm --ext js"
   },
   "keywords": [],
   "author": "",
@@ -14,6 +15,8 @@
     "ajv": "^5.1.1",
     "datauri": "^1.0.5",
     "eslint": "^3.19.0",
+    "eslint-plugin-babel": "^4.1.1",
+    "eslint-plugin-mozilla": "^0.3.2",
     "moustache": "0.0.2"
   },
   "addon": {
@@ -24,5 +27,8 @@
     "creator": "Gregg Lind <glind@mozilla.com>",
     "description": "Shield Intrumented Example As Embedded WebExtension",
     "chrome": "shield-example-addon"
+  },
+  "dependencies": {
+    "eslint-plugin-mozilla": "^0.3.2"
   }
 }

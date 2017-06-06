@@ -1,26 +1,25 @@
 "use strict";
 
 // template code for talking to shield across `browser.runtime`
-async function askShield (msg, data) {
-  let allowed = ['endStudy', 'telemetry', 'info'];
+async function askShield(msg, data) {
+  const allowed = ["endStudy", "telemetry", "info"];
   if (!allowed.includes(msg)) throw new Error(`shieldUtils doesn't know ${msg}, only knows ${allowed}`);
-  return await browser.runtime.sendMessage({shield: true, msg: msg, data: data});
+  return await browser.runtime.sendMessage({shield: true, msg, data});
 }
-let tellShield = askShield;  // alias
-
+const tellShield = askShield;  // alias
 
 class Feature {
   constructor({variation}) {
     console.log("init", variation);
     this.times = 0;
     // do variations specific work.
-    //browser.browserAction.setIcon({path: `icons/${variation}.png`});
+    // browser.browserAction.setIcon({path: `icons/${variation}.png`});
     browser.browserAction.setTitle({title: variation});
     browser.browserAction.onClicked.addListener(() => this.handleClick());
   }
-  handleClick () {
+  handleClick() {
     this.times += 1;
-    console.log('got a click');
+    console.log("got a click");
     tellShield("telemetry", {"evt": "click", times: this.times});
 
     // addon-initiated ending
@@ -31,5 +30,5 @@ class Feature {
 }
 
 // initialize the feature, using our specific variation
-askShield("info").then(({variation})=> new Feature({variation:variation}))
+askShield("info").then(({variation}) => new Feature({variation}));
 

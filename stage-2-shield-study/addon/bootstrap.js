@@ -4,24 +4,23 @@
 const {utils: Cu} = Components;
 const CONFIGPATH = `${__SCRIPT_URI_SPEC__}/../Config.jsm`;
 const { config } = Cu.import(CONFIGPATH, {});
-const { studyUtils } = Cu.import(config.sheid.installPath, {});
+const { shieldConfig } = config.shield;
+const { studyUtils } = Cu.import(shieldConfig.installPath, {});
 
-const log = createLog(config.shield.name, config.log.level);  // defined below.
+const log = createLog(shieldConfig.name, config.log.level);  // defined below.
 
 this.startup = async function(addonData, reason) {
   // addonData: Array [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
   log.debug("startup", REASONS[reason] || reason);
   Jsm.import(config.modules);
 
-  // Configure name, urls, addonData with id
-  studyUtils.configure(config.shield, addonData);
+  studyUtils.setup({studyName: shieldConfig.name, endings: shieldConfig.endings, addonId: addonData.id})
 
   switch (REASONS[reason]) {
     case "ADDON_INSTALL": {
-      studyUtils.saveFirstSeen(Date.now()); // TODO, store a time
       const eligible = await config.isEligible(); // addon-specific
       if (!eligible) {
-        // opens config.urls.ineligible if any, then uninstalls
+        // uses config.endings.ineligible.url if any, then uninstalls
         await studyUtils.endStudy({reason: "ineligible"});
         return;
       }
@@ -29,10 +28,9 @@ this.startup = async function(addonData, reason) {
   }
   // deterministic sampling, set variation
   const variation = await chooseVariation();
-  await studyUtils.setVariation(variation);
-  await studyUtils.startup(reason);
+  await studyUtils.startup({reason: reason, variation:variation});
 
-  // if you have code to handle expiration / long-timers, it goes here.
+  // if you have code to handle expiration / long-timers, it could go here.
 
   const {webExtension} = addonData;
   webExtension.startup().then(api => {
@@ -45,11 +43,11 @@ this.startup = async function(addonData, reason) {
 
 this.shutdown = async function(addonData, reason) {
   log.debug("shutdown", REASONS[reason] || reason);
-  studyUtils.magicShutdown(reason);
+  studyUtils.shutdown(reason);
   // unloads must come after module work
   Jsm.unload([CONFIGPATH]);
   Jsm.unload(config.modules);
-  Jsm.unload(config.shield.installPath);
+  Jsm.unload(shieldConfig.installPath);
 };
 
 this.uninstall = async function(addonData, reason) {
@@ -96,7 +94,7 @@ async function chooseVariation() {
     // this is the standard arm choosing method
     const clientId = await this.getTelemetryId();
     const hashFraction = await studyUtils.hashFraction(config.name + clientId, 12);
-    toSet = studyUtils.chooseFrom(config.shield.variations, hashFraction);
+    toSet = studyUtils.chooseFrom(shieldConfig.variations, hashFraction);
   }
   log.debug(`variation: ${toSet} source:${source}`);
   return toSet;

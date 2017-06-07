@@ -12,10 +12,12 @@ var EXPORTED_SYMBOLS = ["config"];
 var slug = "shield-example-addon"; // matches chrome.manifest;
 
 var config = {
-  "shield": {
-    "name": "an experiment",
+  "study": {
+    "studyName": "an experiment",
     "variation": "kittens", // optional, use to override/decide
-    "variations": [
+    "weightedVariations": [
+      {"name": "control",
+        "weight": 1},
       {"name": "kittens",
         "weight": 1},
       {"name": "puppers",
@@ -29,22 +31,25 @@ var config = {
       * - usually surveys, orientations, explanations
       */
     "endings": {
+      /** standard endings */
       "ineligible": {
         "url": "http://www.example.com/?reason=ineligible",
       },
       "expired": {
         "url": "http://www.example.com/?reason=expired",
       },
-      // made using datauri-cli
+      /** User defined endings */
       "too-popular": {
+        // data uri made using `datauri-cli`
         "url": "data:text/html;base64,PGh0bWw+CiAgPGJvZHk+CiAgICA8cD5Zb3UgYXJlIHVzaW5nIHRoaXMgZmVhdHVyZSA8c3Ryb25nPlNPIE1VQ0g8L3N0cm9uZz4gdGhhdCB3ZSBrbm93IHlvdSBsb3ZlIGl0IQogICAgPC9wPgogICAgPHA+VGhlIEV4cGVyaW1lbnQgaXMgb3ZlciBhbmQgd2UgYXJlIFVOSU5TVEFMTElORwogICAgPC9wPgogIDwvYm9keT4KPC9odG1sPgo=",
+        "study_state": "ended-positive",  // neutral is default
       },
     },
     "testing": true,  // marks pings as testing,
     "installPath": `resource://${slug}/lib/shield-study-utils/ShieldStudy.jsm`,
-
   },
   "isEligible": async function() {
+    // get whatever prefs, addons, telemetry, anything!
     return true;
   },
   // addon-specific modules to load/unload during `startup`, `shutdown`

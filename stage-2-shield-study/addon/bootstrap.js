@@ -4,31 +4,30 @@
 const {utils: Cu} = Components;
 const CONFIGPATH = `${__SCRIPT_URI_SPEC__}/../Config.jsm`;
 const { config } = Cu.import(CONFIGPATH, {});
-const { shieldConfig } = config.shield;
-const { studyUtils } = Cu.import(shieldConfig.installPath, {});
+const studyConfig = config.study;
+const { studyUtils } = Cu.import(studyConfig.installPath, {});
 
-const log = createLog(shieldConfig.name, config.log.level);  // defined below.
+const log = createLog(studyConfig.studyName, config.log.level);  // defined below.
 
 this.startup = async function(addonData, reason) {
   // addonData: Array [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
   log.debug("startup", REASONS[reason] || reason);
+
+  studyUtils.setup({studyName: studyConfig.studyName, endings: studyConfig.endings, addonId: addonData.id});
   Jsm.import(config.modules);
 
-  studyUtils.setup({studyName: shieldConfig.name, endings: shieldConfig.endings, addonId: addonData.id})
-
-  switch (REASONS[reason]) {
-    case "ADDON_INSTALL": {
-      const eligible = await config.isEligible(); // addon-specific
-      if (!eligible) {
-        // uses config.endings.ineligible.url if any, then uninstalls
-        await studyUtils.endStudy({reason: "ineligible"});
-        return;
-      }
+  if ((REASONS[reason]) === "ADDON_INSTALL") {
+    const eligible = await config.isEligible(); // addon-specific
+    if (!eligible) {
+      // uses config.endings.ineligible.url if any, then uninstalls
+      await studyUtils.endStudy({reason: "ineligible"});
+      return;
     }
   }
-  // deterministic sampling, set variation
+
+  // deterministic sampling, then set variation
   const variation = await chooseVariation();
-  await studyUtils.startup({reason: reason, variation:variation});
+  await studyUtils.startup({reason, variation});
 
   // if you have code to handle expiration / long-timers, it could go here.
 
@@ -47,7 +46,7 @@ this.shutdown = async function(addonData, reason) {
   // unloads must come after module work
   Jsm.unload([CONFIGPATH]);
   Jsm.unload(config.modules);
-  Jsm.unload(shieldConfig.installPath);
+  Jsm.unload(studyConfig.installPath);
 };
 
 this.uninstall = async function(addonData, reason) {
@@ -55,11 +54,12 @@ this.uninstall = async function(addonData, reason) {
 };
 
 this.install = async function(addonData, reason) {
-  log.debug("install", REASONS[reason] || reason);   // handle ADDON_UPGRADE if needful
+  log.debug("install", REASONS[reason] || reason);
+  // handle ADDON_UPGRADE (if needful) here
 };
 
 
-/** CONSTANTS and other utilities */
+/** CONSTANTS and other bootstrap.js utilities */
 
 // addon state change reasons
 const REASONS = {
@@ -94,7 +94,7 @@ async function chooseVariation() {
     // this is the standard arm choosing method
     const clientId = await this.getTelemetryId();
     const hashFraction = await studyUtils.hashFraction(config.name + clientId, 12);
-    toSet = studyUtils.chooseFrom(shieldConfig.variations, hashFraction);
+    toSet = studyUtils.chooseFrom(studyConfig.weightedVariations, hashFraction);
   }
   log.debug(`variation: ${toSet} source:${source}`);
   return toSet;
@@ -115,4 +115,3 @@ class Jsm {
     }
   }
 }
-

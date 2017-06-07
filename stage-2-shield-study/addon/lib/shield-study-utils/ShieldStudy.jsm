@@ -17,19 +17,6 @@ Cu.import("resource://gre/modules/AddonManager.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 
-// addon state change reasons
-const REASONS = {
-  APP_STARTUP: 1,      // The application is starting up.
-  APP_SHUTDOWN: 2,     // The application is shutting down.
-  ADDON_ENABLE: 3,     // The add-on is being enabled.
-  ADDON_DISABLE: 4,    // The add-on is being disabled. (Also sent during uninstallation)
-  ADDON_INSTALL: 5,    // The add-on is being installed.
-  ADDON_UNINSTALL: 6,  // The add-on is being uninstalled.
-  ADDON_UPGRADE: 7,    // The add-on is being upgraded.
-  ADDON_DOWNGRADE: 8,  // The add-on is being downgraded.
-};
-for (const r in REASONS) { REASONS[REASONS[r]] = r; }
-
 // telemetry utils
 const CID = Cu.import("resource://gre/modules/ClientID.jsm", null);
 const { TelemetryController } = Cu.import("resource://gre/modules/TelemetryController.jsm", null);
@@ -42,7 +29,6 @@ async function getTelemetryId() {
     return await CID.ClientIDImpl._doLoadClientID();
   }
   return id;
-
 }
 
 const DIRECTORY = new URL(this.__URI__ + "/../").href;
@@ -64,19 +50,6 @@ var jsonschema = {
     return {valid, errors:  ajv.errors || []};
   },
 };
-
-const schemas = {
-  "shield-study": nodeRequire(DIRECTORY + "schemas-client/shield-study.schema.json"),
-  "shield-study-addon": nodeRequire(DIRECTORY + "schemas-client/shield-study-addon.schema.json"),
-  "shield-study-error": nodeRequire(DIRECTORY + "schemas-client/shield-study-error.schema.json"),
-  "sampleWeights": {
-  },
-};
-
-// create a validate function
-function validate(data, schema) {
-  return {valid: true, errors: null};
-}
 
 // survey utils
 function survey(url, queryArgs = {}) {
@@ -297,7 +270,7 @@ class StudyUtils {
       };
       if (bucket === "shield-study-error") {
         // log: if it's a warn or error, it breaks jpm test
-        Console.log("cannot validate shield-study-error", data, bucket);
+        log.warn("cannot validate shield-study-error", data, bucket);
         return; // just die, maybe should have a super escape hatch?
       }
       return this.telemetryError(errorReport);
@@ -319,6 +292,127 @@ class StudyUtils {
   telemetryError(errorReport) {
     return this._telemetry(errorReport, "shield-study-error");
   }
+  validateJSON(json, schema) {
+    return jsonschema.validate(json, schema);
+  }
 }
 
 var studyUtils = new StudyUtils();
+
+
+
+/** addon state change reasons */
+const REASONS = {
+  APP_STARTUP: 1,      // The application is starting up.
+  APP_SHUTDOWN: 2,     // The application is shutting down.
+  ADDON_ENABLE: 3,     // The add-on is being enabled.
+  ADDON_DISABLE: 4,    // The add-on is being disabled. (Also sent during uninstallation)
+  ADDON_INSTALL: 5,    // The add-on is being installed.
+  ADDON_UNINSTALL: 6,  // The add-on is being uninstalled.
+  ADDON_UPGRADE: 7,    // The add-on is being upgraded.
+  ADDON_DOWNGRADE: 8,  // The add-on is being downgraded.
+};
+for (const r in REASONS) { REASONS[REASONS[r]] = r; }
+
+
+/** Schemas, imported and local */
+
+const schemas = {
+  "shield-study": nodeRequire(DIRECTORY + "schemas-client/shield-study.schema.json"),
+  "shield-study-addon": nodeRequire(DIRECTORY + "schemas-client/shield-study-addon.schema.json"),
+  "shield-study-error": nodeRequire(DIRECTORY + "schemas-client/shield-study-error.schema.json"),
+  "weightedVariations": {
+    "definitions": {
+      "weightedVariation": {
+        "properties": {
+          "name": {
+            "type": "string",
+          },
+          "weight": {
+            "type": "integer",
+          },
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "weight",
+        ],
+      },
+    },
+    "items": {
+      "$ref": "#/definitions/weightedVariation",
+    },
+    "type": "array",
+  },
+  "webExtensionMessage": {
+    "type": "object",
+    "properties": {
+      "shield": {
+        "type": "boolean",
+      },
+      "msg": {
+        "type": "string",
+        "enum": [
+          "endStudy",
+          "telemetry",
+          "info",
+        ],
+      },
+      "data": {
+        "type": "object",
+      },
+    },
+    "required": [
+      "shield",
+      "msg",
+    ],
+  },
+  "studySetup": {
+    "type": "object",
+    "definitions": {
+      "ending": {
+        "type": "object",
+        "properties": {
+          "study_state": {
+            "type": "string",
+            "enum": [
+              "installed",
+              "ineligible",
+              "expired",
+              "user-disable",
+              "ended-positive",
+              "ended-neutral",
+              "ended-negative",
+            ],
+          },
+          "study_state_fullname": {
+            "type": "string",
+            "description": "Second part of name of state, if any.  Study-specific for study-defined endings.",
+          },
+          "url": {
+            "type": "string",
+          },
+        },
+      },
+    },
+    "properties": {
+      "studyName": {
+        "type": "string",
+      },
+      "addonId": {
+        "type": "string",
+      },
+      "endings": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/definitions/ending",
+        },
+      },
+    },
+    "required": [
+      "studyName",
+      "endings",
+      "addonId",
+    ],
+  },
+};

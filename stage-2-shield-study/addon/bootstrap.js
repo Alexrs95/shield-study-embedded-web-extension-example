@@ -7,11 +7,11 @@ const { config } = Cu.import(CONFIGPATH, {});
 const studyConfig = config.study;
 const { studyUtils } = Cu.import(studyConfig.installPath, {});
 
-const log = createLog(studyConfig.studyName, config.log.level);  // defined below.
+const LOG = createLog(studyConfig.studyName, config.log.level);  // defined below.
 
 this.startup = async function(addonData, reason) {
   // addonData: Array [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
-  log.debug("startup", REASONS[reason] || reason);
+  LOG.debug("startup", REASONS[reason] || reason);
 
   studyUtils.setup({studyName: studyConfig.studyName, endings: studyConfig.endings, addonId: addonData.id});
   Jsm.import(config.modules);
@@ -41,7 +41,7 @@ this.startup = async function(addonData, reason) {
 };
 
 this.shutdown = async function(addonData, reason) {
-  log.debug("shutdown", REASONS[reason] || reason);
+  LOG.debug("shutdown", REASONS[reason] || reason);
   studyUtils.shutdown(reason);
   // unloads must come after module work
   Jsm.unload([CONFIGPATH]);
@@ -50,11 +50,11 @@ this.shutdown = async function(addonData, reason) {
 };
 
 this.uninstall = async function(addonData, reason) {
-  log.debug("uninstall", REASONS[reason] || reason);
+  LOG.debug("uninstall", REASONS[reason] || reason);
 };
 
 this.install = async function(addonData, reason) {
-  log.debug("install", REASONS[reason] || reason);
+  LOG.debug("install", REASONS[reason] || reason);
   // handle ADDON_UPGRADE (if needful) here
 };
 
@@ -77,7 +77,7 @@ for (const r in REASONS) { REASONS[REASONS[r]] = r; }
 // logging
 function createLog(name, level) {
   Cu.import("resource://gre/modules/Log.jsm");
-  Log.repository.getLogger(name);
+  let log = Log.repository.getLogger(name);
   log.addAppender(new Log.ConsoleAppender(new Log.BasicFormatter()));
   log.level = level || Log.Level.Debug; // should be a config / pref
   return log;
@@ -96,7 +96,7 @@ async function chooseVariation() {
     const hashFraction = await studyUtils.hashFraction(config.name + clientId, 12);
     toSet = studyUtils.chooseFrom(studyConfig.weightedVariations, hashFraction);
   }
-  log.debug(`variation: ${toSet} source:${source}`);
+  LOG.debug(`variation: ${toSet} source:${source}`);
   return toSet;
 }
 
@@ -104,13 +104,13 @@ async function chooseVariation() {
 class Jsm {
   static import(modulesArray) {
     for (const module of modulesArray) {
-      log.debug(`loading ${module}`);
+      LOG.debug(`loading ${module}`);
       Cu.import(module);
     }
   }
   static unload(modulesArray) {
     for (const module of modulesArray) {
-      log.debug(`Unloading ${module}`);
+      LOG.debug(`Unloading ${module}`);
       Cu.unload(module);
     }
   }
